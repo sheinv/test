@@ -32,7 +32,6 @@ if(Boost_FOUND)
     add_executable(${PROJECT_NAME}
         main.cpp
         proxy_srv.h
-        proxy_srv.cpp
         )
 
     target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES})
