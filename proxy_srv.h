@@ -7,6 +7,9 @@
 #include <boost/asio/raw_socket_service.hpp>
 #include <boost/bind.hpp>
 #include <boost/log/trivial.hpp>
+#include <boost/log/utility/manipulators/dump.hpp>
+
+#include "tds_proto.h"
 
 //#include <boost/program_options.hpp>
 
@@ -28,7 +31,7 @@ namespace bip = bas::ip;
 
 using socket_t = bas::ip::tcp::socket;
 
-using data_buf_t = std::array<std::byte,buf_size>;
+using data_buf_t = std::array<uint8_t,buf_size>;
 
 class proxy_link: public std::enable_shared_from_this<proxy_link>
 {
@@ -60,7 +63,18 @@ class proxy_link: public std::enable_shared_from_this<proxy_link>
 			return;
 		}
 
+		tds::packet pdu(m_ddatabuf.data(),bytes_transferred);
+
+		auto sql_batch = pdu.find_pdu<tds::sql_batch>();
+
+		if (sql_batch != nullptr)
+		{
+			BOOST_LOG_TRIVIAL(info) << "Found SQL_Batch PDU";
+		}
+
 		BOOST_LOG_TRIVIAL(info) << "\t\t\t\t\tReceived data from downstream link";
+
+		BOOST_LOG_TRIVIAL(info) << boost::log::dump(m_ddatabuf.data(),bytes_transferred);
 
 		bas::async_write(m_usckt,
 						  boost::asio::buffer(m_ddatabuf.data(),bytes_transferred),
@@ -99,6 +113,8 @@ class proxy_link: public std::enable_shared_from_this<proxy_link>
 		}
 
 		BOOST_LOG_TRIVIAL(info) << "\t\t\t\t\tReceived data from upstream link";
+
+		BOOST_LOG_TRIVIAL(info) << boost::log::dump(m_udatabuf.data(),bytes_transferred);
 
 		bas::async_write(m_dsckt,
 						 boost::asio::buffer(m_udatabuf.data(),bytes_transferred),
@@ -184,7 +200,7 @@ public:
 						boost::asio::placeholders::error));
 	}
 
-	static pointer create(boost::asio::io_context& io_context)
+	static pointer create(bas::io_context& io_context)
 	{
 		return std::make_shared<proxy_link>(io_context);
 	}
@@ -222,7 +238,7 @@ class proxy_srv
 public:
 	void start_accept()
 	{
-		auto new_link = std::make_shared<proxy_link>(m_acceptor.get_executor().context());
+		auto new_link = proxy_link::create(m_acceptor.get_executor().context());
 
 		BOOST_LOG_TRIVIAL(info) << "Start accepting downstream connections";
 
