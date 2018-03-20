@@ -6,10 +6,8 @@
 #include <boost/asio.hpp>
 #include <boost/asio/raw_socket_service.hpp>
 #include <boost/bind.hpp>
-#include <boost/log/trivial.hpp>
 #include <boost/log/utility/manipulators/dump.hpp>
-
-#include "tds_proto.h"
+#include <boost/log/sources/record_ostream.hpp>
 
 //#include <boost/program_options.hpp>
 
@@ -20,6 +18,9 @@
 
 #include <codecvt>
 #include <locale>
+
+#include "tds_proto.h"
+#include "logger.h"
 
 namespace proxy {
 
@@ -36,6 +37,8 @@ using socket_t = bas::ip::tcp::socket;
 
 using data_buf_t = std::array<uint8_t,buf_size>;
 
+using namespace logger;
+
 class proxy_link: public std::enable_shared_from_this<proxy_link>
 {
     bas::io_context& m_io_ctx;
@@ -46,7 +49,8 @@ class proxy_link: public std::enable_shared_from_this<proxy_link>
     data_buf_t m_udatabuf;
     data_buf_t m_ddatabuf;
 
-    std::mutex m_mtx;
+    logger_t lg_console {keywords::channel = "console"};
+    logger_t lg_file {keywords::channel = "file"};
 
     void close_sockets()
     {
@@ -56,12 +60,12 @@ class proxy_link: public std::enable_shared_from_this<proxy_link>
             m_dsckt.close();
     }
 
-    void handle_dreceive(const bs::error_code& error,
+    void handle_dreceive(const bs::error_code& _error,
                          std::size_t bytes_transferred)
     {
-        if (error)
+        if (_error)
         {
-            BOOST_LOG_TRIVIAL(error) <<__FUNCSIG__ << " error: " << error.message();
+            BOOST_LOG_SEV(lg_console, error) <<__FUNCSIG__ << " error: " << _error.message();
             close_sockets();
             return;
         }
@@ -74,12 +78,12 @@ class proxy_link: public std::enable_shared_from_this<proxy_link>
             //std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
             //std::string str = converter.to_bytes(text);
 
-            BOOST_LOG_TRIVIAL(error) << text;
+            BOOST_LOG_SEV(lg_console, trace) << text;
+            BOOST_LOG_SEV(lg_file, trace) << text;
         }
 
-        BOOST_LOG_TRIVIAL(info) << "\t\t\t\t\tReceived data from downstream link";
-
-        BOOST_LOG_TRIVIAL(info) << boost::log::dump(m_ddatabuf.data(),bytes_transferred);
+        BOOST_LOG_SEV(lg_console, trace) << "\t\t\t\t\tReceived data from downstream link";
+        BOOST_LOG_SEV(lg_console, trace) << boost::log::dump(m_ddatabuf.data(),bytes_transferred);
 
         bas::async_write(m_usckt,
                           boost::asio::buffer(m_ddatabuf.data(),bytes_transferred),
@@ -95,31 +99,30 @@ class proxy_link: public std::enable_shared_from_this<proxy_link>
                                 boost::asio::placeholders::bytes_transferred));
     }
 
-    void handle_dsend(const bs::error_code& error)
+    void handle_dsend(const bs::error_code& _error)
     {
-        if (error)
+        if (_error)
         {
-            BOOST_LOG_TRIVIAL(error) <<__FUNCSIG__ << " error: " << error.message();
+            BOOST_LOG_SEV(lg_console, error) <<__FUNCSIG__ << " error: " << _error.message();
             close_sockets();
             return;
         }
 
-        BOOST_LOG_TRIVIAL(info) << "\t\t\t\t\tDownstream send was successful";
+        BOOST_LOG_SEV(lg_console, trace) << "\t\t\t\t\tDownstream send was successful";
     }
 
-    void handle_ureceive(const bs::error_code& error,
+    void handle_ureceive(const bs::error_code& _error,
                          std::size_t bytes_transferred)
     {
-        if (error)
+        if (_error)
         {
-            BOOST_LOG_TRIVIAL(error) <<__FUNCSIG__ << " error: " << error.message();
+            BOOST_LOG_SEV(lg_console, error) <<__FUNCSIG__ << " error: " << _error.message();
             close_sockets();
             return;
         }
 
-        BOOST_LOG_TRIVIAL(info) << "\t\t\t\t\tReceived data from upstream link";
-
-        BOOST_LOG_TRIVIAL(info) << boost::log::dump(m_udatabuf.data(),bytes_transferred);
+        BOOST_LOG_SEV(lg_console, trace) << "\t\t\t\t\tReceived data from upstream link";
+        BOOST_LOG_SEV(lg_console, trace) << boost::log::dump(m_udatabuf.data(),bytes_transferred);
 
         bas::async_write(m_dsckt,
                          boost::asio::buffer(m_udatabuf.data(),bytes_transferred),
@@ -135,30 +138,29 @@ class proxy_link: public std::enable_shared_from_this<proxy_link>
                                 boost::asio::placeholders::bytes_transferred));
     }
 
-    void handle_usend(const bs::error_code& error)
+    void handle_usend(const bs::error_code& _error)
     {
-        if (error)
+        if (_error)
         {
-            BOOST_LOG_TRIVIAL(error) <<__FUNCSIG__ << " error: " << error.message();
+            BOOST_LOG_SEV(lg_console, error) <<__FUNCSIG__ << " error: " << _error.message();
             close_sockets();
             return;
         }
 
-        BOOST_LOG_TRIVIAL(info) << "\t\t\t\t\tUpstream send was successful";
+        BOOST_LOG_SEV(lg_console, trace) << "\t\t\t\t\tUpstream send was successful";
     }
 
-    void handle_uaddr_connect(const boost::system::error_code& error)
+    void handle_uaddr_connect(const boost::system::error_code& _error)
     {
-        if (error)
+        if (_error)
         {
             std::stringstream os;
-            os << __FUNCSIG__ << " error: " << error.message();
+            os << __FUNCSIG__ << " error: " << _error.message();
             throw std::runtime_error(os.str());
         }
 
-        BOOST_LOG_TRIVIAL(info) << "\t\t\tConnection with upstream host was established";
-
-        BOOST_LOG_TRIVIAL(info) << "\t\t\t\tStart listening downstream socket";
+        BOOST_LOG_SEV(lg_console, trace) << "\t\t\tConnection with upstream host was established";
+        BOOST_LOG_SEV(lg_console, trace) << "\t\t\t\tStart listening downstream socket";
 
         m_dsckt.async_read_some(
                     boost::asio::buffer(m_ddatabuf.data(),m_ddatabuf.size()),
@@ -168,7 +170,7 @@ class proxy_link: public std::enable_shared_from_this<proxy_link>
                                 boost::asio::placeholders::bytes_transferred));
 
 
-        BOOST_LOG_TRIVIAL(info) << "\t\t\t\tStart listening upstream socket";
+       BOOST_LOG_SEV(lg_console, trace) << "\t\t\t\tStart listening upstream socket";
 
         m_usckt.async_read_some(
                     boost::asio::buffer(m_udatabuf.data(),m_udatabuf.size()),
@@ -194,7 +196,7 @@ public:
 
     void connect(const boost::asio::ip::address& _uaddr, port_t _uport)
     {
-        BOOST_LOG_TRIVIAL(info) << "\t\tStart establishing link to upstream host";
+        BOOST_LOG_SEV(lg_console, trace) << "\t\tStart establishing link to upstream host";
 
         m_usckt.async_connect(
                     bip::tcp::endpoint(
@@ -214,27 +216,30 @@ public:
 class proxy_srv
 {
     bas::io_context&            m_io_ctx;
-    bip::tcp::acceptor            m_acceptor;
+    bip::tcp::acceptor          m_acceptor;
     socket_t                    m_asckt;
+
+    logger_t lg_console {keywords::channel = "console"};
+    logger_t lg_file {keywords::channel = "file"};
 
     using link_ptr_t = std::shared_ptr<proxy_link>;
 
     bip::address    m_daddr;
-    port_t            m_dport;
+    port_t          m_dport;
 
     bip::address    m_uaddr;
-    port_t            m_uport;
+    port_t          m_uport;
 
-    void handle_accept(proxy_link::pointer new_link, const boost::system::error_code& error)
+    void handle_accept(proxy_link::pointer new_link, const boost::system::error_code& _error)
     {
-        if (error)
+        if (_error)
         {
             std::stringstream os;
-            os << __FUNCSIG__ << " error: " << error.message();
+            os << __FUNCSIG__ << " error: " << _error.message();
             throw std::runtime_error(os.str());
         }
 
-        BOOST_LOG_TRIVIAL(info) << "\tDownstream connection was accepted";
+        BOOST_LOG_SEV(lg_console, trace) << "\tDownstream connection was accepted";
 
         new_link->connect(m_uaddr, m_uport);
 
@@ -245,7 +250,7 @@ public:
     {
         auto new_link = proxy_link::create(m_acceptor.get_executor().context());
 
-        BOOST_LOG_TRIVIAL(info) << "Start accepting downstream connections";
+        BOOST_LOG_SEV(lg_console, trace) << "Start accepting downstream connections";
 
         m_acceptor.async_accept(new_link->dsckt(), boost::bind(&proxy_srv::handle_accept, this, new_link, bas::placeholders::error));
     }
