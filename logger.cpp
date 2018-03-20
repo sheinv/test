@@ -39,7 +39,7 @@ void init(const min_severity_filter &min_severity, const std::string& file_name)
     using tf_sink_t = sinks::asynchronous_sink<tf_backend_t>;
 
     auto tf_backend = boost::make_shared<tf_backend_t>(
-        keywords::file_name = "D:\\Temp\\logfile.log",
+        keywords::file_name = file_name,
         keywords::rotation_size = 5 * 1024 * 1024,
         keywords::time_based_rotation = sinks::file::rotation_at_time_point(12, 0, 0)
     );

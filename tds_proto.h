@@ -280,7 +280,7 @@ public:
     }
 
     inline uint8_t* data() { return m_data; }
-    inline size_t    size() { return m_size; }
+    inline size_t   size() { return m_size; }
 
     inline pdu* inner_pdu()
     {
