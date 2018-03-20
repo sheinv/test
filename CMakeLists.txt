@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.0)
 
 set(PROJECT_NAME test)
 
@@ -41,6 +41,8 @@ if(Boost_FOUND)
                     main.cpp
                     proxy_srv.h
                     tds_proto.h
+                    logger.h
+                    logger.cpp
                 )
 
         elseif(CMAKE_COMPILER_IS_GNUCXX)
