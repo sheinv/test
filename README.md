@@ -1,5 +1,4 @@
-# test
-Test MSSQL proxy project with SQL commands logging.
+# Test MSSQL proxy project with SQL commands logging.
 
 Built on Windows with QTCreator using:
     * MSVC 2017 compiler 15.0 x64 in c++17 mode
