@@ -18,6 +18,9 @@
 #include <array>
 #include <string>
 
+#include <codecvt>
+#include <locale>
+
 namespace proxy {
 
 using port_t = std::uint16_t;
@@ -64,12 +67,14 @@ class proxy_link: public std::enable_shared_from_this<proxy_link>
 		}
 
 		tds::packet pdu(m_ddatabuf.data(),bytes_transferred);
+		auto* query_pdu = pdu.find_pdu<tds::query_pdu>();
 
-		auto sql_batch = pdu.find_pdu<tds::sql_batch>();
+		if (query_pdu != nullptr) {
+			auto text = query_pdu->text();
+			//std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+			//std::string str = converter.to_bytes(text);
 
-		if (sql_batch != nullptr)
-		{
-			BOOST_LOG_TRIVIAL(info) << "Found SQL_Batch PDU";
+			BOOST_LOG_TRIVIAL(error) << text;
 		}
 
 		BOOST_LOG_TRIVIAL(info) << "\t\t\t\t\tReceived data from downstream link";

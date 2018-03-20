@@ -5,7 +5,7 @@
 
 #include <boost/format.hpp>
 
-#include <streambuf>
+#include <iostream>
 
 namespace tds {
 
@@ -229,6 +229,13 @@ enum class STREAM_HDR_TYPE: uint8_t {
 	TRANS_DESCR = 0x0002
 };
 
+enum class PKT_FLAGS {
+	UNDEF = 0,
+	RAW,
+	SQL_BATCH,
+	QUERY
+};
+
 #pragma pack(push)  /* push current alignment to stack */
 #pragma pack(1)
 
@@ -248,15 +255,13 @@ struct stream_header_t {
 };
 
 struct trans_descr_hdr_t {
-	uint32_t OutstandingRequestCount;
-	uint64_t TransactionDescriptor;
+	//uint32_t OutstandingRequestCount;
+	//uint64_t TransactionDescriptor;
+	uint16_t OutstandingRequestCount;
+	uint16_t TransactionDescriptor;
 };
 
 #pragma pack(pop)
-
-class tocken_stream {};
-
-class tockenless_stream {};
 
 class pdu {
 public:
@@ -285,30 +290,51 @@ public:
 	virtual ~pdu() {}
 
 	template <typename T>
-	T* find_pdu(){
-		if (T::PKT_FLAG == PKT_FLAG)
-			return static_cast<T*>(this);
+	T* find_pdu(PKT_FLAGS flag = T::PKT_FLAG) {
+		pdu* _pdu = this;
 
-		auto _inner_pdu = inner_pdu();
+		while (_pdu != nullptr) {
+			if (_pdu->pdu_type() == flag)
+				return static_cast<T*>(_pdu);
 
-		if (_inner_pdu == nullptr)
-			return nullptr;
+			_pdu = _pdu->inner_pdu();
+		}
 
-		return inner_pdu()->find_pdu<T>();
+		return nullptr;
 	}
 
-	static constexpr auto PKT_FLAG {PKT_TYPES::UNDEF};
+	virtual PKT_FLAGS pdu_type()
+	{
+		return PKT_FLAG;
+	}
+
+	static constexpr auto PKT_FLAG {PKT_FLAGS::UNDEF};
 };
 
 class query_pdu: public pdu
 {
+	std::wstring m_text;
 public:
 	query_pdu() = delete;
 	query_pdu(uint8_t* _data, size_t _size)
 		: pdu(_data,_size)
 	{
-		;
+		std::wstringstream _stream;
+		_stream.write((wchar_t*)_data, size()/sizeof(wchar_t));
+		m_text = _stream.str();
 	}
+
+	std::wstring& text()
+	{
+		return m_text;
+	}
+
+	PKT_FLAGS pdu_type() override
+	{
+		return PKT_FLAG;
+	}
+
+	static constexpr auto PKT_FLAG {PKT_FLAGS::QUERY};
 };
 
 class sql_batch: public pdu
@@ -318,6 +344,7 @@ public:
 	sql_batch() = delete;
 	sql_batch(uint8_t* _data, size_t _size)
 		: pdu(_data,_size)
+		, m_stm_hdr_ptr {reinterpret_cast<stream_header_t*>(_data)}
 	{
 		if (_size < sizeof(stream_header_t)) {
 			auto msg = boost::str(boost::format("{0} failed. Data size={1} < sizeof(hdr)={2}") % __FUNCSIG__ % _size % sizeof(*m_stm_hdr_ptr));
@@ -326,9 +353,11 @@ public:
 
 		switch (m_stm_hdr_ptr->HeaderType)
 		{
-			case PKT_TYPES::QUERY:
-				m_inner_pdu = std::make_unique<query_pdu>(data()+sizeof(*m_stm_hdr_ptr), size()-sizeof(*m_stm_hdr_ptr));
-				break;
+			case STREAM_HDR_TYPE::TRANS_DESCR: {
+					auto inner_pdu_begin = data()+m_stm_hdr_ptr->HeaderLength + sizeof(trans_descr_hdr_t);
+					auto inner_pdu_size  = size()-m_stm_hdr_ptr->HeaderLength - sizeof(trans_descr_hdr_t);
+					m_inner_pdu = std::make_unique<query_pdu>(inner_pdu_begin, inner_pdu_size);
+				} break;
 			default:
 				//throw std::runtime_error("Unknown PKT_TYPE. It can't be handled yet.");
 				break;
@@ -337,7 +366,12 @@ public:
 
 	~sql_batch() override {}
 
-	static constexpr auto PKT_FLAG {PKT_TYPES::QUERY};
+	PKT_FLAGS pdu_type() override
+	{
+		return PKT_FLAG;
+	}
+
+	static constexpr auto PKT_FLAG {PKT_FLAGS::SQL_BATCH};
 };
 
 class packet: public pdu {
@@ -382,6 +416,13 @@ public:
 
 	inline uint8_t window() { return m_hdr_ptr->Window; }
 	inline void window(uint8_t _window) { m_hdr_ptr->Window = _window; }
+
+	PKT_FLAGS pdu_type() override
+	{
+		return PKT_FLAG;
+	}
+
+	static constexpr auto PKT_FLAG {PKT_FLAGS::RAW};
 };
 
 }
