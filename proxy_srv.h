@@ -55,9 +55,15 @@ class proxy_link: public std::enable_shared_from_this<proxy_link>
     void close_sockets()
     {
         if (m_usckt.is_open())
+        {
+            m_usckt.shutdown(boost::asio::ip::tcp::socket::shutdown_receive);
             m_usckt.close();
+        }
         if (m_dsckt.is_open())
+        {
+            m_dsckt.shutdown(boost::asio::ip::tcp::socket::shutdown_receive);
             m_dsckt.close();
+        }
     }
 
     void handle_dreceive(const bs::error_code& _error,
@@ -65,7 +71,11 @@ class proxy_link: public std::enable_shared_from_this<proxy_link>
     {
         if (_error)
         {
-            BOOST_LOG_SEV(lg_console, error) <<__FUNCSIG__ << " error: " << _error.message();
+            if (_error == bas::error::eof || _error.value() == ERROR_CONNECTION_ABORTED)
+                BOOST_LOG_SEV(lg_console, trace) <<__FUNCSIG__ << " connection closed";
+            else
+                BOOST_LOG_SEV(lg_console, error) <<__FUNCSIG__ << " error: " << _error.message();
+
             close_sockets();
             return;
         }
@@ -116,7 +126,11 @@ class proxy_link: public std::enable_shared_from_this<proxy_link>
     {
         if (_error)
         {
-            BOOST_LOG_SEV(lg_console, error) <<__FUNCSIG__ << " error: " << _error.message();
+            if (_error == bas::error::eof || _error.value() == ERROR_CONNECTION_ABORTED)
+                BOOST_LOG_SEV(lg_console, trace) <<__FUNCSIG__ << " connection closed";
+            else
+                BOOST_LOG_SEV(lg_console, error) <<__FUNCSIG__ << " error: " << _error.message();
+
             close_sockets();
             return;
         }
